@@ -97,6 +97,9 @@ PERMISSION_MODE = "acceptEdits"
 MAX_TURNS: int | None = None
 MAX_BUDGET_USD: float | None = None
 
+CONFIGS_JSON = ROOT / "configs" / "configs.json"
+GLOBAL_SETTINGS_PATH = Path.home() / ".claude" / "settings.json"
+
 
 # =============================================================================
 # TOOL CONDITIONS
@@ -154,6 +157,23 @@ TOOLS = [
         "mcp_config": "~/Dev/Projects/CodeIntel/benchmark-config/codeintel.json",
     },
 ]
+
+# Populated by validate_config() at startup. Maps engine name to its config dict.
+ENGINE_CONFIGS: dict[str, dict[str, str | None]] = {}
+
+
+def load_engine_configs() -> dict[str, dict[str, str | None]]:
+    if not CONFIGS_JSON.exists():
+        die(f"Engine config index not found: {CONFIGS_JSON}")
+    try:
+        data = json.loads(CONFIGS_JSON.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        die(f"Cannot parse {CONFIGS_JSON}: {exc}")
+    return {
+        e["name"]: e.get("config", {})
+        for e in data.get("engines", [])
+        if e.get("name")
+    }
 
 
 # =============================================================================
@@ -550,31 +570,159 @@ EMPTY_MCP_CONFIG = {
 def prepare_mcp_config(
     tool: dict[str, Any],
     run_dir: Path,
+    repo_name: str,
 ) -> Path:
     """
-    Return an MCP config that contains exactly the servers for this condition.
+    Write a per-run MCP config to run_dir and return its path.
 
-    For "none", create an empty config.
-    For the other conditions, use the configured JSON file.
+    For "none" (or any engine with mcp=null): write an empty config.
+    For other engines: read the template, substitute {REPO_NAME} with
+    repo_name, validate as JSON, write to run_dir/mcp-config.json.
     """
+    engine_cfg = ENGINE_CONFIGS.get(tool["name"], {})
+    mcp_rel = engine_cfg.get("mcp")
 
-    config = tool.get("mcp_config")
-
-    if config is None:
+    if mcp_rel is None:
         path = run_dir / "empty-mcp.json"
-        path.write_text(
-            json.dumps(EMPTY_MCP_CONFIG, indent=2)
-        )
+        path.write_text(json.dumps(EMPTY_MCP_CONFIG, indent=2))
         return path
 
-    path = expand(config)
-
-    if not path.exists():
+    template = ROOT / mcp_rel
+    if not template.exists():
         raise FileNotFoundError(
-            f"MCP config for '{tool['name']}' not found: {path}"
+            f"MCP config template for '{tool['name']}' not found: {template}"
         )
 
-    return path
+    content = template.read_text(encoding="utf-8").replace("{REPO_NAME}", repo_name)
+
+    try:
+        json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"Rendered MCP config for '{tool['name']}' is invalid JSON: {exc}"
+        ) from exc
+
+    dest = run_dir / "mcp-config.json"
+    dest.write_text(content, encoding="utf-8")
+    return dest
+
+
+# =============================================================================
+# SETTINGS MANAGEMENT
+# =============================================================================
+
+_GLOBAL_SETTINGS_BACKUP = Path(
+    str(GLOBAL_SETTINGS_PATH) + f".benchmark-bak-{os.getpid()}"
+)
+
+
+def _render_template(template_path: Path, repo_name: str) -> str:
+    return template_path.read_text(encoding="utf-8").replace("{REPO_NAME}", repo_name)
+
+
+def _validated_json(content: str, label: str) -> str:
+    try:
+        json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Rendered {label} is not valid JSON: {exc}") from exc
+    return content
+
+
+def apply_engine_config(
+    tool: dict[str, Any],
+    workspace: Path,
+    result_dir: Path,
+    repo_name: str,
+) -> dict[str, Any]:
+    """Apply all config files for this engine. Returns a context dict for restore."""
+    engine_cfg = ENGINE_CONFIGS.get(tool["name"], {})
+    ctx: dict[str, Any] = {
+        "wrote_global": False,
+        "had_original_global": GLOBAL_SETTINGS_PATH.exists(),
+        "mcp_config": None,
+    }
+
+    gs_rel = engine_cfg.get("global_settings")
+    if gs_rel is not None:
+        gs_template = ROOT / gs_rel
+        if not gs_template.exists():
+            raise FileNotFoundError(
+                f"global_settings template for '{tool['name']}' not found: {gs_template}"
+            )
+        content = _validated_json(
+            _render_template(gs_template, repo_name),
+            f"global_settings for '{tool['name']}'",
+        )
+        if ctx["had_original_global"]:
+            shutil.copy2(GLOBAL_SETTINGS_PATH, _GLOBAL_SETTINGS_BACKUP)
+        GLOBAL_SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        GLOBAL_SETTINGS_PATH.write_text(content, encoding="utf-8")
+        ctx["wrote_global"] = True
+
+    try:
+        ps_rel = engine_cfg.get("project_settings")
+        if ps_rel is not None:
+            ps_template = ROOT / ps_rel
+            if ps_template.exists():
+                content = _validated_json(
+                    _render_template(ps_template, repo_name),
+                    f"project_settings for '{tool['name']}'",
+                )
+                dest = workspace / ".claude" / "settings.json"
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_text(content, encoding="utf-8")
+            else:
+                print(
+                    f"  WARNING: project_settings template for '{tool['name']}' "
+                    f"not found (skipping): {ps_template}",
+                    file=sys.stderr,
+                )
+
+        ls_rel = engine_cfg.get("local_settings")
+        if ls_rel is not None:
+            ls_template = ROOT / ls_rel
+            if ls_template.exists():
+                content = _validated_json(
+                    _render_template(ls_template, repo_name),
+                    f"local_settings for '{tool['name']}'",
+                )
+                dest = workspace / ".claude" / "settings.local.json"
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_text(content, encoding="utf-8")
+            else:
+                print(
+                    f"  WARNING: local_settings template for '{tool['name']}' "
+                    f"not found (skipping): {ls_template}",
+                    file=sys.stderr,
+                )
+
+        ctx["mcp_config"] = prepare_mcp_config(tool, result_dir, repo_name)
+
+    except Exception:
+        _do_restore_global(ctx)
+        raise
+
+    return ctx
+
+
+def restore_engine_config(ctx: dict[str, Any]) -> None:
+    """Restore ~/.claude/settings.json to its pre-run state. Must not raise."""
+    try:
+        _do_restore_global(ctx)
+    except Exception as exc:
+        print(
+            f"WARNING: Failed to restore ~/.claude/settings.json: {exc}",
+            file=sys.stderr,
+        )
+
+
+def _do_restore_global(ctx: dict[str, Any]) -> None:
+    if not ctx.get("wrote_global"):
+        return
+    if ctx["had_original_global"] and _GLOBAL_SETTINGS_BACKUP.exists():
+        shutil.move(str(_GLOBAL_SETTINGS_BACKUP), str(GLOBAL_SETTINGS_PATH))
+    elif not ctx["had_original_global"]:
+        GLOBAL_SETTINGS_PATH.unlink(missing_ok=True)
 
 
 # =============================================================================
@@ -935,11 +1083,15 @@ def run_one(
 
     started_at = now_iso()
 
+    engine_ctx: dict[str, Any] | None = None
     try:
-        mcp_config = prepare_mcp_config(
+        engine_ctx = apply_engine_config(
             tool,
+            workspace,
             result_dir,
+            repo["name"],
         )
+        mcp_config = engine_ctx["mcp_config"]
 
         prompt = task_prompt(
             task_type,
@@ -1065,6 +1217,8 @@ def run_one(
         return result
 
     finally:
+        if engine_ctx is not None:
+            restore_engine_config(engine_ctx)
         remove_worktree(
             repo_path,
             workspace,
@@ -1409,6 +1563,8 @@ def print_plan(
 # =============================================================================
 
 def validate_config() -> None:
+    global ENGINE_CONFIGS
+    ENGINE_CONFIGS = load_engine_configs()
 
     if not shutil.which(CLAUDE_BIN):
         die(
@@ -1428,13 +1584,24 @@ def validate_config() -> None:
 
         tool_names.add(name)
 
-        if name != "none":
-            config = expand(tool["mcp_config"])
+        if name == "none":
+            continue
 
-            if not config.exists():
+        if name not in ENGINE_CONFIGS:
+            print(
+                f"WARNING: Engine '{name}' has no entry in {CONFIGS_JSON}",
+                file=sys.stderr,
+            )
+            continue
+
+        cfg = ENGINE_CONFIGS[name]
+        for key in ("mcp", "global_settings", "project_settings", "local_settings"):
+            rel = cfg.get(key)
+            if rel is not None and not (ROOT / rel).exists():
                 print(
-                    f"WARNING: MCP config for '{name}' "
-                    f"does not exist yet: {config}"
+                    f"WARNING: {key} template for '{name}' "
+                    f"not found: {ROOT / rel}",
+                    file=sys.stderr,
                 )
 
     repo_names = set()
