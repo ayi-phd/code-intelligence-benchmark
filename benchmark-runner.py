@@ -79,84 +79,45 @@ from typing import Any
 ROOT = Path(__file__).resolve().parent
 RESULTS_DIR = ROOT / "benchmark-results"
 WORKTREES_DIR = ROOT / ".benchmark-worktrees"
-LOCAL_REPOS_DIR = ROOT / "benchmark-repos"
 
 CLAUDE_BIN = os.environ.get("CLAUDE_BIN", "claude")
 
-# Keep the model fixed for the entire experiment.
-# Change this once, before beginning the benchmark, and don't change it
-# between conditions.
-MODEL = os.environ.get("CLAUDE_MODEL", "sonnet")
-
-# Keep Claude's agent behavior consistent across conditions.
-# "acceptEdits" allows implementation tasks to edit files without making
-# the benchmark interactive. We explicitly tell Claude not to build/test.
-PERMISSION_MODE = "acceptEdits"
+INPUTS_JSON = ROOT / "inputs.json"
+CONFIGS_JSON = ROOT / "configs" / "configs.json"
+GLOBAL_SETTINGS_PATH = Path.home() / ".claude" / "settings.json"
 
 # Optional safety/cost limits. None means no artificial benchmark limit.
 MAX_TURNS: int | None = None
 MAX_BUDGET_USD: float | None = None
 
-CONFIGS_JSON = ROOT / "configs" / "configs.json"
-GLOBAL_SETTINGS_PATH = Path.home() / ".claude" / "settings.json"
+# ---------------------------------------------------------------------------
+# Load inputs.json — single source of truth for model, repos, and tools.
+# MODEL can still be overridden by the CLAUDE_MODEL env var.
+# ---------------------------------------------------------------------------
+try:
+    _inputs: dict[str, Any] = json.loads(INPUTS_JSON.read_text(encoding="utf-8"))
+except FileNotFoundError:
+    print(f"ERROR: {INPUTS_JSON} not found.", file=sys.stderr)
+    sys.exit(1)
+except json.JSONDecodeError as _exc:
+    print(f"ERROR: Cannot parse {INPUTS_JSON}: {_exc}", file=sys.stderr)
+    sys.exit(1)
+
+MODEL: str = os.environ.get("CLAUDE_MODEL") or _inputs.get("model", "sonnet")
+PERMISSION_MODE: str = _inputs.get("permission_mode", "acceptEdits")
 
 
 # =============================================================================
-# TOOL CONDITIONS
+# TOOL CONDITIONS AND REPOSITORIES  (loaded from inputs.json)
 # =============================================================================
 #
-# Every condition is an adapter.
-#
-# mcp_config:
-#   - None for the "none" condition.
-#   - For the MCP conditions, point this at a Claude Code MCP JSON config
-#     containing ONLY the server(s) for that condition.
-#
-# Example:
-#
-#   {
-#       "name": "codemap",
-#       "mcp_config": "~/Dev/Projects/CodeIntel/benchmark-config/codemap.json",
-#   }
-#
-# Claude Code supports --strict-mcp-config, which makes the run use ONLY
-# the supplied config and ignore other MCP configurations. This is important
-# for a fair benchmark.
-#
-# The script creates an empty MCP config for "none", so the baseline cannot
-# accidentally inherit a user's globally configured MCP server.
-#
-# See:
-# https://code.claude.com/docs/en/cli-usage
+# Edit inputs.json to change the benchmark configuration.
+# Claude Code uses --strict-mcp-config so each run sees only the MCP servers
+# declared for that condition; MCP + hooks templates live in configs/.
 #
 
-TOOLS = [
-    {
-        "name": "none",
-        "description": "Claude Code without code-intelligence MCP",
-        "mcp_config": None,
-    },
-    {
-        "name": "repowise",
-        "description": "Claude Code + RepoWise",
-        "mcp_config": "~/Dev/Projects/CodeIntel/benchmark-config/repowise.json",
-    },
-    {
-        "name": "graphify",
-        "description": "Claude Code + Graphify",
-        "mcp_config": "~/Dev/Projects/CodeIntel/benchmark-config/graphify.json",
-    },
-    {
-        "name": "codemap",
-        "description": "Claude Code + CodeMap",
-        "mcp_config": "~/Dev/Projects/CodeIntel/benchmark-config/codemap.json",
-    },
-    {
-        "name": "codeintel",
-        "description": "Claude Code + CodeIntel",
-        "mcp_config": "~/Dev/Projects/CodeIntel/benchmark-config/codeintel.json",
-    },
-]
+TOOLS: list[dict[str, Any]] = _inputs.get("tools", [])
+REPOS: list[dict[str, Any]] = _inputs.get("repos", [])
 
 # Populated by validate_config() at startup. Maps engine name to its config dict.
 ENGINE_CONFIGS: dict[str, dict[str, str | None]] = {}
@@ -174,94 +135,6 @@ def load_engine_configs() -> dict[str, dict[str, str | None]]:
         for e in data.get("engines", [])
         if e.get("name")
     }
-
-
-# =============================================================================
-# REPOSITORIES
-# =============================================================================
-#
-# Prefer local_path when you already have the repo.
-# If local_path is missing/nonexistent, the script clones url into
-# ./benchmark-repos/<name>.
-#
-# "commit":
-#   Pin this before the real benchmark. If None, the script uses the current
-#   HEAD of the local repository and records it in the result.
-#
-# feature_tasks:
-#   One or more repository-specific feature tasks.
-#
-# IMPORTANT:
-#   These are deliberately placeholders for the feature descriptions.
-#   Select the actual benchmark features before running the benchmark.
-#
-
-REPOS = [
-    {
-        "name": "k6",
-        "language": "go",
-        "local_path": "~/Dev/Benchmarks/k6",
-        "url": "https://github.com/grafana/k6.git",
-        "commit": None,
-        "feature_tasks": [
-            {
-                "name": "feature-1",
-                "description": """
-REPLACE THIS with the actual k6 feature task.
-
-The task should be a bounded, realistic engineering change that requires
-understanding the existing architecture and should touch several relevant
-files, but should not require external infrastructure.
-""",
-            },
-        ],
-    },
-    {
-        "name": "xxl-job",
-        "language": "java",
-        "local_path": "~/Dev/Benchmarks/xxl-job",
-        "url": "https://github.com/xuxueli/xxl-job.git",
-        "commit": None,
-        "feature_tasks": [
-            {
-                "name": "feature-1",
-                "description": """
-REPLACE THIS with the actual xxl-job feature task.
-""",
-            },
-        ],
-    },
-    {
-        "name": "trpc",
-        "language": "typescript",
-        "local_path": "~/Dev/Benchmarks/trpc",
-        "url": "https://github.com/trpc/trpc.git",
-        "commit": None,
-        "feature_tasks": [
-            {
-                "name": "feature-1",
-                "description": """
-REPLACE THIS with the actual tRPC feature task.
-""",
-            },
-        ],
-    },
-    {
-        "name": "locust",
-        "language": "python",
-        "local_path": "~/Dev/Benchmarks/locust",
-        "url": "https://github.com/locustio/locust.git",
-        "commit": None,
-        "feature_tasks": [
-            {
-                "name": "feature-1",
-                "description": """
-REPLACE THIS with the actual Locust feature task.
-""",
-            },
-        ],
-    },
-]
 
 
 # =============================================================================

@@ -59,7 +59,7 @@
     {
       "name": "miniflux",
       "language": "go",
-      "local_path": "~/Dev/Benchmarks/miniflux",
+      "local_path": "/Users/andrei/Dev/Projects/Claude-Benchmark/benchmark-repos/miniflux",
       "feature_tasks": [
         {
           "name": "feature-1",
@@ -70,7 +70,7 @@
     {
       "name": "halo",
       "language": "java",
-      "local_path": "~/Dev/Benchmarks/halo",
+      "local_path": "/Users/andrei/Dev/Projects/Claude-Benchmark/benchmark-repos/halo",
       "feature_tasks": [
         {
           "name": "feature-1",
@@ -81,7 +81,7 @@
     {
       "name": "formbricks",
       "language": "typescript",
-      "local_path": "~/Dev/Benchmarks/formbricks",
+      "local_path": "/Users/andrei/Dev/Projects/Claude-Benchmark/benchmark-repos/formbricks",
       "benchmark_root": ".",
       "feature_tasks": [
         {
@@ -93,7 +93,7 @@
     {
       "name": "pretix",
       "language": "python",
-      "local_path": "~/Dev/Benchmarks/pretix",
+      "local_path": "/Users/andrei/Dev/Projects/Claude-Benchmark/benchmark-repos/pretix",
       "feature_tasks": [
         {
           "name": "feature-1",
