@@ -1,0 +1,78 @@
+{
+  "model": "sonnet",
+  "permission_mode": "acceptEdits",
+  "tools": [
+    {
+      "name": "none",
+      "description": "Claude Code without code-intelligence MCP",
+      "mcp_config": null
+    },
+    {
+      "name": "repowise",
+      "description": "Claude Code + RepoWise",
+      "mcp_config": "~/Dev/Projects/CodeIntel/benchmark-config/repowise.json"
+    },
+    {
+      "name": "graphify",
+      "description": "Claude Code + Graphify",
+      "mcp_config": "~/Dev/Projects/CodeIntel/benchmark-config/graphify.json"
+    },
+    {
+      "name": "codemap",
+      "description": "Claude Code + CodeMap",
+      "mcp_config": "~/Dev/Projects/CodeIntel/benchmark-config/codemap.json"
+    },
+    {
+      "name": "codeintel",
+      "description": "Claude Code + CodeIntel",
+      "mcp_config": "~/Dev/Projects/CodeIntel/benchmark-config/codeintel.json"
+    }
+  ],
+  "repos": [
+    {
+      "name": "miniflux",
+      "language": "go",
+      "local_path": "~/Dev/Benchmarks/miniflux",
+      "feature_tasks": [
+        {
+          "name": "feature-1",
+          "description": "REPLACE WITH THE ACTUAL MINIFLUX FEATURE TASK"
+        }
+      ]
+    },
+    {
+      "name": "halo",
+      "language": "java",
+      "local_path": "~/Dev/Benchmarks/halo",
+      "feature_tasks": [
+        {
+          "name": "feature-1",
+          "description": "REPLACE WITH THE ACTUAL HALO FEATURE TASK"
+        }
+      ]
+    },
+    {
+      "name": "formbricks",
+      "language": "typescript",
+      "local_path": "~/Dev/Benchmarks/formbricks",
+      "benchmark_root": ".",
+      "feature_tasks": [
+        {
+          "name": "feature-1",
+          "description": "REPLACE WITH THE ACTUAL FORMBRICKS FEATURE TASK"
+        }
+      ]
+    },
+    {
+      "name": "pretix",
+      "language": "python",
+      "local_path": "~/Dev/Benchmarks/pretix",
+      "feature_tasks": [
+        {
+          "name": "feature-1",
+          "description": "REPLACE WITH THE ACTUAL PRETIX FEATURE TASK"
+        }
+      ]
+    }
+  ]
+}

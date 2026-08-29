@@ -1,0 +1,26 @@
+# Python
+
+**pycache**/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# Benchmark output
+
+results/*
+!results/.gitkeep
+
+# Local configuration / machine-specific files
+
+.DS_Store
+*.local.json
+
+# IDE
+
+.idea/
+.vscode/
+*.swp
+*.swo
+
