@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "codemap": {
+      "args": [
+        "--project-root",
+        "/Users/andrei/Dev/Projects/Claude-Benchmark/benchmark-repos/{REPO_NAME}",
+        "mcp",
+        "--configured-version",
+        "4.4.0",
+        "--integration",
+        "claude-setup"
+      ],
+      "command": "/opt/homebrew/bin/codemap"
+    }
+  }
+}

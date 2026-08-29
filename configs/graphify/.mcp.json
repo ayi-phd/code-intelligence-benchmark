@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "graphify": {
+      "args": [
+        "-m",
+        "graphify.serve",
+        "/Users/andrei/Dev/Projects/Claude-Benchmark/{REPO_NAME}/graphify-out/graph.json"
+      ],
+      "command": "/Users/andrei/Library/Application Support/pipx/venvs/graphifyy/bin/python",
+      "description": "graphify: local code graph & community extraction"
+    }
+  }
+}
