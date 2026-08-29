@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "repowise": {
+      "args": [
+        "mcp",
+        "/Users/andrei/Dev/Projects/Claude-Benchmark/benchmark-repos/{REPO_NAME}",
+        "--transport",
+        "stdio"
+      ],
+      "command": "repowise",
+      "description": "repowise: codebase intelligence \u2014 docs, graph, git signals, dead code, decisions"
+    }
+  }
+}

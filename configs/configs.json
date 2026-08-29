@@ -1,0 +1,40 @@
+{
+  "engines": [
+    {
+      "name": "none",
+      "config": {
+        "global_settings": null,
+        "mcp": null,
+        "project_settings": null,
+        "local_settings": null
+      }
+    },
+    {
+      "name": "repowise",
+      "config": {
+        "global_settings": "configs/repowise/global-settings.json",
+        "mcp": "configs/repowise/mcp.json",
+        "project_settings": null,
+        "local_settings": null
+      }
+    },
+    {
+      "name": "graphify",
+      "config": {
+        "global_settings": null,
+        "mcp": "configs/graphify/mcp.json",
+        "project_settings": "configs/graphify/settings.json",
+        "local_settings": null
+      }
+    },
+    {
+      "name": "codemap",
+      "config": {
+        "global_settings": null,
+        "mcp": "configs/codemap/mcp.json",
+        "project_settings": "configs/codemap/settings.json",
+        "local_settings": "configs/codemap/settings.local.json"
+      }
+    }
+  ]
+}

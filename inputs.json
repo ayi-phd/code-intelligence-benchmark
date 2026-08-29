@@ -1,33 +1,60 @@
 {
   "model": "sonnet",
   "permission_mode": "acceptEdits",
+
   "tools": [
     {
       "name": "none",
-      "description": "Claude Code without code-intelligence MCP",
-      "mcp_config": null
+      "description": "Claude Code without code-intelligence",
+      "config": {
+        "global_settings": null,
+        "mcp": null,
+        "project_settings": null,
+        "local_settings": null
+      }
     },
     {
       "name": "repowise",
       "description": "Claude Code + RepoWise",
-      "mcp_config": "~/Dev/Projects/CodeIntel/benchmark-config/repowise.json"
+      "config": {
+        "global_settings": "configs/repowise/global-settings.json",
+        "mcp": "configs/repowise/mcp.json",
+        "project_settings": null,
+        "local_settings": null
+      }
     },
     {
       "name": "graphify",
       "description": "Claude Code + Graphify",
-      "mcp_config": "~/Dev/Projects/CodeIntel/benchmark-config/graphify.json"
+      "config": {
+        "global_settings": null,
+        "mcp": "configs/graphify/mcp.json",
+        "project_settings": "configs/graphify/settings.json",
+        "local_settings": null
+      }
     },
     {
       "name": "codemap",
       "description": "Claude Code + CodeMap",
-      "mcp_config": "~/Dev/Projects/CodeIntel/benchmark-config/codemap.json"
+      "config": {
+        "global_settings": null,
+        "mcp": "configs/codemap/mcp.json",
+        "project_settings": "configs/codemap/settings.json",
+        "local_settings": "configs/codemap/settings.local.json"
+      }
     },
     {
       "name": "codeintel",
       "description": "Claude Code + CodeIntel",
-      "mcp_config": "~/Dev/Projects/CodeIntel/benchmark-config/codeintel.json"
+      "config": {
+        "global_settings": null,
+        "project_settings": "configs/codeintel/settings.json",
+        "mcp": "configs/codeintel/mcp.json",
+        "local_settings": null
+      }
     }
   ],
+
   "repos": [
     {
       "name": "miniflux",
