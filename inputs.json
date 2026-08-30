@@ -62,8 +62,8 @@
       "local_path": "/Users/andrei/Dev/Projects/Claude-Benchmark/benchmark-repos/miniflux",
       "feature_tasks": [
         {
-          "name": "feature-1",
-          "description": "REPLACE WITH THE ACTUAL MINIFLUX FEATURE TASK"
+          "name": "Miniflux Feature 1: Bulk Tagging API",
+          "description": "Implement a bulk tagging API for feed entries. Add POST /v1/entries/bulk/tags. The request must include a list of entry IDs and may include add and remove tag lists. At least one tag list is required. Only update entries the authenticated user can access. Adding an existing tag or removing a missing tag should succeed without error. Return the number of updated entries. Handle invalid requests, unknown entries, and unauthorized access with appropriate errors. Add API documentation and tests for success, validation, authorization, idempotency, and adding and removing tags together."
         }
       ]
     },
@@ -73,8 +73,8 @@
       "local_path": "/Users/andrei/Dev/Projects/Claude-Benchmark/benchmark-repos/halo",
       "feature_tasks": [
         {
-          "name": "feature-1",
-          "description": "REPLACE WITH THE ACTUAL HALO FEATURE TASK"
+          "name": "Halo Feature 1: Status changes history API",
+          "description": "Add GET /api/equipment/{equipmentId}/status-history to return an authenticated user's equipment status changes, filtered by optional from/to dates or the most recent 30 days by default, in chronological order without duplicates. Include validation, authorization, appropriate errors, API documentation, and tests."
         }
       ]
     },
@@ -85,8 +85,8 @@
       "benchmark_root": ".",
       "feature_tasks": [
         {
-          "name": "feature-1",
-          "description": "REPLACE WITH THE ACTUAL FORMBRICKS FEATURE TASK"
+          "name": "FormBricks Feature 1: Survey responses export",
+          "description": "Add GET /api/surveys/{surveyId}/responses/export to export authenticated project members’ survey responses, optionally filtered by from and to submission dates, including response metadata and data. Enforce survey access, validate dates, handle unknown surveys and empty results, and add documentation and tests."
         }
       ]
     },
@@ -96,8 +96,8 @@
       "local_path": "/Users/andrei/Dev/Projects/Claude-Benchmark/benchmark-repos/pretix",
       "feature_tasks": [
         {
-          "name": "feature-1",
-          "description": "REPLACE WITH THE ACTUAL PRETIX FEATURE TASK"
+          "name": "Pretix Feature 1: Internal order notes API",
+          "description": "Add an authenticated REST API for internal order notes: POST /api/v1/organizers/{organizer}/events/{event}/orders/{order}/notes to create notes and GET to retrieve them chronologically. Notes require text, include text, creation timestamp, and author, are visible only to users authorized to access the order, and must not appear in customer-facing order data. Handle invalid requests, missing resources, and unauthorized access; add documentation and tests."
         }
       ]
     }
