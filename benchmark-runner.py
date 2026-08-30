@@ -483,9 +483,6 @@ def prepare_mcp_config(
 # SETTINGS MANAGEMENT
 # =============================================================================
 
-_EMPTY_SETTINGS = "{}\n"
-
-
 def _render_template(template_path: Path, repo_name: str) -> str:
     return template_path.read_text(encoding="utf-8").replace("{REPO_NAME}", repo_name)
 
@@ -500,7 +497,6 @@ def _validated_json(content: str, label: str) -> str:
 
 def apply_engine_config(
     tool: dict[str, Any],
-    workspace: Path,
     result_dir: Path,
     repo_name: str,
 ) -> dict[str, Any]:
@@ -511,68 +507,32 @@ def apply_engine_config(
         "settings_file": None,
     }
 
-    # For global_settings (user-level hooks, e.g. RepoWise): render the template
-    # to a run-specific file and pass it via --settings. We use --setting-sources
-    # project,local on every claude invocation to skip ~/.claude/ entirely, so we
-    # never need to touch or back up the user's real settings files.
-    gs_rel = engine_cfg.get("global_settings")
-    if gs_rel is not None:
-        gs_template = ROOT / gs_rel
-        if not gs_template.exists():
+    # We use --setting-sources "" on every claude invocation so NO file-based
+    # settings are loaded (not user, not project, not local). This prevents any
+    # hooks from the benchmark repos' own .claude/ files from firing, regardless
+    # of where those files live (main worktree, linked worktrees, etc.).
+    #
+    # Engine hooks are injected via --settings <file> instead. The three config
+    # keys (global_settings, project_settings, local_settings) differ only in
+    # which file the hooks would normally live; here they all end up in the same
+    # --settings path and are loaded the same way.
+    for key in ("global_settings", "project_settings", "local_settings"):
+        rel = engine_cfg.get(key)
+        if rel is None:
+            continue
+        template = ROOT / rel
+        if not template.exists():
             raise FileNotFoundError(
-                f"global_settings template for '{tool['name']}' not found: {gs_template}"
+                f"{key} template for '{tool['name']}' not found: {template}"
             )
         content = _validated_json(
-            _render_template(gs_template, repo_name),
-            f"global_settings for '{tool['name']}'",
+            _render_template(template, repo_name),
+            f"{key} for '{tool['name']}'",
         )
         settings_path = result_dir / "engine-settings.json"
         settings_path.write_text(content, encoding="utf-8")
         ctx["settings_file"] = settings_path
-
-    # Always write worktree project and local settings — even when the engine
-    # has no template — to neutralize any hooks the repo itself may have
-    # (e.g. CodeMap commits hooks into .claude/settings.local.json).
-    worktree_claude = workspace / ".claude"
-    worktree_claude.mkdir(parents=True, exist_ok=True)
-
-    ps_rel = engine_cfg.get("project_settings")
-    if ps_rel is not None:
-        ps_template = ROOT / ps_rel
-        if ps_template.exists():
-            content = _validated_json(
-                _render_template(ps_template, repo_name),
-                f"project_settings for '{tool['name']}'",
-            )
-        else:
-            print(
-                f"  WARNING: project_settings template for '{tool['name']}' "
-                f"not found (using empty): {ps_template}",
-                file=sys.stderr,
-            )
-            content = _EMPTY_SETTINGS
-    else:
-        content = _EMPTY_SETTINGS
-    (worktree_claude / "settings.json").write_text(content, encoding="utf-8")
-
-    ls_rel = engine_cfg.get("local_settings")
-    if ls_rel is not None:
-        ls_template = ROOT / ls_rel
-        if ls_template.exists():
-            content = _validated_json(
-                _render_template(ls_template, repo_name),
-                f"local_settings for '{tool['name']}'",
-            )
-        else:
-            print(
-                f"  WARNING: local_settings template for '{tool['name']}' "
-                f"not found (using empty): {ls_template}",
-                file=sys.stderr,
-            )
-            content = _EMPTY_SETTINGS
-    else:
-        content = _EMPTY_SETTINGS
-    (worktree_claude / "settings.local.json").write_text(content, encoding="utf-8")
+        break  # only one settings source per engine in current design
 
     ctx["mcp_config"] = prepare_mcp_config(tool, result_dir, repo_name)
     return ctx
@@ -772,12 +732,14 @@ def execute_claude(
         "--strict-mcp-config",
         "--mcp-config",
         str(mcp_config),
-        # Exclude user-level (~/.claude/) settings to prevent machine hooks
-        # from contaminating benchmark runs. Engine hooks are injected either
-        # via --settings (global_settings engines like repowise) or written
-        # directly to the worktree's .claude/ files (project/local engines).
+        # Suppress ALL file-based settings (user, project, local) so no hooks
+        # from the user's machine or the benchmarked repo itself can fire.
+        # Claude follows the git worktree pointer to the main repo's .claude/,
+        # so writing to the worktree's .claude/ is ineffective. Using an empty
+        # source list is the only reliable way to prevent contamination.
+        # Engine hooks are injected explicitly via --settings below.
         "--setting-sources",
-        "project,local",
+        "",
         "--model",
         MODEL,
         "--permission-mode",
@@ -949,7 +911,6 @@ def run_one(
     try:
         engine_ctx = apply_engine_config(
             tool,
-            workspace,
             result_dir,
             repo["name"],
         )
