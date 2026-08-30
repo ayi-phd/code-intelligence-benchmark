@@ -551,6 +551,12 @@ def apply_engine_config(
     ctx["wrote_global_local"] = True
 
     try:
+        # Always write worktree project and local settings — even when the engine
+        # has no template — to neutralize any hooks the repo itself may have
+        # (e.g. CodeMap writes hooks into .claude/settings.local.json on init).
+        worktree_claude = workspace / ".claude"
+        worktree_claude.mkdir(parents=True, exist_ok=True)
+
         ps_rel = engine_cfg.get("project_settings")
         if ps_rel is not None:
             ps_template = ROOT / ps_rel
@@ -559,15 +565,16 @@ def apply_engine_config(
                     _render_template(ps_template, repo_name),
                     f"project_settings for '{tool['name']}'",
                 )
-                dest = workspace / ".claude" / "settings.json"
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                dest.write_text(content, encoding="utf-8")
             else:
                 print(
                     f"  WARNING: project_settings template for '{tool['name']}' "
-                    f"not found (skipping): {ps_template}",
+                    f"not found (using empty): {ps_template}",
                     file=sys.stderr,
                 )
+                content = _EMPTY_SETTINGS
+        else:
+            content = _EMPTY_SETTINGS
+        (worktree_claude / "settings.json").write_text(content, encoding="utf-8")
 
         ls_rel = engine_cfg.get("local_settings")
         if ls_rel is not None:
@@ -577,15 +584,16 @@ def apply_engine_config(
                     _render_template(ls_template, repo_name),
                     f"local_settings for '{tool['name']}'",
                 )
-                dest = workspace / ".claude" / "settings.local.json"
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                dest.write_text(content, encoding="utf-8")
             else:
                 print(
                     f"  WARNING: local_settings template for '{tool['name']}' "
-                    f"not found (skipping): {ls_template}",
+                    f"not found (using empty): {ls_template}",
                     file=sys.stderr,
                 )
+                content = _EMPTY_SETTINGS
+        else:
+            content = _EMPTY_SETTINGS
+        (worktree_claude / "settings.local.json").write_text(content, encoding="utf-8")
 
         ctx["mcp_config"] = prepare_mcp_config(tool, result_dir, repo_name)
 
