@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/andrei/.local/bin/graphify hook-guard search"
+            "command": "GRAPHIFY_OUT=/Users/andrei/Dev/Projects/Claude-Benchmark/benchmark-repos/{REPO_NAME}/graphify-out /Users/andrei/.local/bin/graphify hook-guard search"
           }
         ]
       },
@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/andrei/.local/bin/graphify hook-guard read"
+            "command": "GRAPHIFY_OUT=/Users/andrei/Dev/Projects/Claude-Benchmark/benchmark-repos/{REPO_NAME}/graphify-out /Users/andrei/.local/bin/graphify hook-guard read"
           }
         ]
       }
