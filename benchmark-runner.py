@@ -729,6 +729,7 @@ def execute_claude(
         "--output-format",
         "stream-json",
         "--verbose",
+        "--include-hook-events",
         "--strict-mcp-config",
         "--mcp-config",
         str(mcp_config),
