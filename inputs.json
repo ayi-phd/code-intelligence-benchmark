@@ -39,18 +39,8 @@
       "config": {
         "global_settings": null,
         "mcp": "configs/codemap/mcp.json",
-        "project_settings": "configs/codemap/settings.json",
+        "project_settings": null,
         "local_settings": "configs/codemap/settings.local.json"
-      }
-    },
-    {
-      "name": "codeintel",
-      "description": "Claude Code + CodeIntel",
-      "config": {
-        "global_settings": null,
-        "project_settings": "configs/codeintel/settings.json",
-        "mcp": "configs/codeintel/mcp.json",
-        "local_settings": null
       }
     }
   ],
