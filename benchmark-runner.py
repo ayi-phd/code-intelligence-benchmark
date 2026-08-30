@@ -484,9 +484,12 @@ def prepare_mcp_config(
 # SETTINGS MANAGEMENT
 # =============================================================================
 
-_GLOBAL_SETTINGS_BACKUP = Path(
-    str(GLOBAL_SETTINGS_PATH) + f".benchmark-bak-{os.getpid()}"
-)
+_PID = os.getpid()
+_GLOBAL_SETTINGS_BACKUP = Path(str(GLOBAL_SETTINGS_PATH) + f".benchmark-bak-{_PID}")
+_GLOBAL_LOCAL_SETTINGS_PATH = GLOBAL_SETTINGS_PATH.parent / "settings.local.json"
+_GLOBAL_LOCAL_SETTINGS_BACKUP = Path(str(_GLOBAL_LOCAL_SETTINGS_PATH) + f".benchmark-bak-{_PID}")
+
+_EMPTY_SETTINGS = "{}\n"
 
 
 def _render_template(template_path: Path, repo_name: str) -> str:
@@ -512,9 +515,14 @@ def apply_engine_config(
     ctx: dict[str, Any] = {
         "wrote_global": False,
         "had_original_global": GLOBAL_SETTINGS_PATH.exists(),
+        "wrote_global_local": False,
+        "had_original_global_local": _GLOBAL_LOCAL_SETTINGS_PATH.exists(),
         "mcp_config": None,
     }
 
+    # Always neutralize ~/.claude/settings.json to prevent the user's real
+    # global hooks (e.g. RepoWise) from bleeding into other engine runs.
+    # Write the engine's global_settings template, or an empty object if none.
     gs_rel = engine_cfg.get("global_settings")
     if gs_rel is not None:
         gs_template = ROOT / gs_rel
@@ -526,11 +534,21 @@ def apply_engine_config(
             _render_template(gs_template, repo_name),
             f"global_settings for '{tool['name']}'",
         )
-        if ctx["had_original_global"]:
-            shutil.copy2(GLOBAL_SETTINGS_PATH, _GLOBAL_SETTINGS_BACKUP)
-        GLOBAL_SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
-        GLOBAL_SETTINGS_PATH.write_text(content, encoding="utf-8")
-        ctx["wrote_global"] = True
+    else:
+        content = _EMPTY_SETTINGS
+
+    if ctx["had_original_global"]:
+        shutil.copy2(GLOBAL_SETTINGS_PATH, _GLOBAL_SETTINGS_BACKUP)
+    GLOBAL_SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    GLOBAL_SETTINGS_PATH.write_text(content, encoding="utf-8")
+    ctx["wrote_global"] = True
+
+    # Always neutralize ~/.claude/settings.local.json to prevent the user's
+    # machine-local hooks (e.g. CodeMap) from bleeding into other engine runs.
+    if ctx["had_original_global_local"]:
+        shutil.copy2(_GLOBAL_LOCAL_SETTINGS_PATH, _GLOBAL_LOCAL_SETTINGS_BACKUP)
+    _GLOBAL_LOCAL_SETTINGS_PATH.write_text(_EMPTY_SETTINGS, encoding="utf-8")
+    ctx["wrote_global_local"] = True
 
     try:
         ps_rel = engine_cfg.get("project_settings")
@@ -579,23 +597,28 @@ def apply_engine_config(
 
 
 def restore_engine_config(ctx: dict[str, Any]) -> None:
-    """Restore ~/.claude/settings.json to its pre-run state. Must not raise."""
+    """Restore ~/.claude/settings.json and settings.local.json. Must not raise."""
     try:
         _do_restore_global(ctx)
     except Exception as exc:
         print(
-            f"WARNING: Failed to restore ~/.claude/settings.json: {exc}",
+            f"WARNING: Failed to restore global Claude settings: {exc}",
             file=sys.stderr,
         )
 
 
 def _do_restore_global(ctx: dict[str, Any]) -> None:
-    if not ctx.get("wrote_global"):
-        return
-    if ctx["had_original_global"] and _GLOBAL_SETTINGS_BACKUP.exists():
-        shutil.move(str(_GLOBAL_SETTINGS_BACKUP), str(GLOBAL_SETTINGS_PATH))
-    elif not ctx["had_original_global"]:
-        GLOBAL_SETTINGS_PATH.unlink(missing_ok=True)
+    if ctx.get("wrote_global"):
+        if ctx["had_original_global"] and _GLOBAL_SETTINGS_BACKUP.exists():
+            shutil.move(str(_GLOBAL_SETTINGS_BACKUP), str(GLOBAL_SETTINGS_PATH))
+        elif not ctx["had_original_global"]:
+            GLOBAL_SETTINGS_PATH.unlink(missing_ok=True)
+
+    if ctx.get("wrote_global_local"):
+        if ctx["had_original_global_local"] and _GLOBAL_LOCAL_SETTINGS_BACKUP.exists():
+            shutil.move(str(_GLOBAL_LOCAL_SETTINGS_BACKUP), str(_GLOBAL_LOCAL_SETTINGS_PATH))
+        elif not ctx["had_original_global_local"]:
+            _GLOBAL_LOCAL_SETTINGS_PATH.unlink(missing_ok=True)
 
 
 # =============================================================================
