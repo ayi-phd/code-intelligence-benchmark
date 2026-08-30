@@ -499,12 +499,14 @@ def apply_engine_config(
     tool: dict[str, Any],
     result_dir: Path,
     repo_name: str,
+    repo_path: Path,
 ) -> dict[str, Any]:
     """Prepare all config for this engine run. Returns a context dict."""
     engine_cfg = ENGINE_CONFIGS.get(tool["name"], {})
     ctx: dict[str, Any] = {
         "mcp_config": None,
         "settings_file": None,
+        "claude_md_file": None,
     }
 
     # We use --setting-sources "" on every claude invocation so NO file-based
@@ -533,6 +535,45 @@ def apply_engine_config(
         settings_path.write_text(content, encoding="utf-8")
         ctx["settings_file"] = settings_path
         break  # only one settings source per engine in current design
+
+    # --setting-sources "" also suppresses CLAUDE.md auto-discovery. Inject
+    # engine-specific instructions via --append-system-prompt-file instead.
+    # The file is saved to result_dir so it can be reviewed after the run.
+    #
+    # Two config shapes:
+    #   claude_md         – path to a static template file (relative to ROOT)
+    #   claude_md_command – shell command whose stdout is the CLAUDE.md content;
+    #                       run in the main repo directory (not the worktree)
+    claude_md_content: str | None = None
+    static_rel = engine_cfg.get("claude_md")
+    dynamic_cmd = engine_cfg.get("claude_md_command")
+
+    if static_rel is not None:
+        template = ROOT / static_rel
+        if not template.exists():
+            raise FileNotFoundError(
+                f"claude_md template for '{tool['name']}' not found: {template}"
+            )
+        claude_md_content = template.read_text(encoding="utf-8")
+    elif dynamic_cmd is not None:
+        result = subprocess.run(
+            dynamic_cmd,
+            shell=True,
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"claude_md_command for '{tool['name']}' failed (exit {result.returncode}): "
+                f"{result.stderr.strip()}"
+            )
+        claude_md_content = result.stdout
+
+    if claude_md_content is not None:
+        claude_md_path = result_dir / "engine-claude-md.md"
+        claude_md_path.write_text(claude_md_content, encoding="utf-8")
+        ctx["claude_md_file"] = claude_md_path
 
     ctx["mcp_config"] = prepare_mcp_config(tool, result_dir, repo_name)
     return ctx
@@ -722,6 +763,7 @@ def execute_claude(
     prompt: str,
     mcp_config: Path,
     settings_file: Path | None = None,
+    claude_md_file: Path | None = None,
 ) -> dict[str, Any]:
     command = [
         CLAUDE_BIN,
@@ -749,6 +791,9 @@ def execute_claude(
 
     if settings_file is not None:
         command.extend(["--settings", str(settings_file)])
+
+    if claude_md_file is not None:
+        command.extend(["--append-system-prompt-file", str(claude_md_file)])
 
     if MAX_TURNS is not None:
         command.extend(
@@ -914,9 +959,11 @@ def run_one(
             tool,
             result_dir,
             repo["name"],
+            repo_path,
         )
         mcp_config = engine_ctx["mcp_config"]
         settings_file = engine_ctx["settings_file"]
+        claude_md_file = engine_ctx["claude_md_file"]
 
         prompt = task_prompt(
             task_type,
@@ -930,6 +977,7 @@ def run_one(
             prompt,
             mcp_config,
             settings_file,
+            claude_md_file,
         )
 
         diff = git_diff(workspace)
@@ -990,6 +1038,7 @@ def run_one(
             "artifacts": {
                 "raw_stream": "claude-stream.jsonl",
                 "diff": "diff.patch",
+                "engine_claude_md": "engine-claude-md.md" if claude_md_file else None,
             },
 
             "errors": {

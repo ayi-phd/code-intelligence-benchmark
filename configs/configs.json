@@ -15,7 +15,8 @@
         "global_settings": "configs/repowise/global-settings.json",
         "mcp": "configs/repowise/mcp.json",
         "project_settings": null,
-        "local_settings": null
+        "local_settings": null,
+        "claude_md_command": "repowise generate-claude-md --stdout"
       }
     },
     {
@@ -24,7 +25,8 @@
         "global_settings": null,
         "mcp": "configs/graphify/mcp.json",
         "project_settings": "configs/graphify/settings.json",
-        "local_settings": null
+        "local_settings": null,
+        "claude_md": "configs/graphify/claude.md"
       }
     },
     {
