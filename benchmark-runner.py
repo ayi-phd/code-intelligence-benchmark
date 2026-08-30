@@ -84,7 +84,6 @@ CLAUDE_BIN = os.environ.get("CLAUDE_BIN", "claude")
 
 INPUTS_JSON = ROOT / "inputs.json"
 CONFIGS_JSON = ROOT / "configs" / "configs.json"
-GLOBAL_SETTINGS_PATH = Path.home() / ".claude" / "settings.json"
 
 # Optional safety/cost limits. None means no artificial benchmark limit.
 MAX_TURNS: int | None = None
@@ -484,11 +483,6 @@ def prepare_mcp_config(
 # SETTINGS MANAGEMENT
 # =============================================================================
 
-_PID = os.getpid()
-_GLOBAL_SETTINGS_BACKUP = Path(str(GLOBAL_SETTINGS_PATH) + f".benchmark-bak-{_PID}")
-_GLOBAL_LOCAL_SETTINGS_PATH = GLOBAL_SETTINGS_PATH.parent / "settings.local.json"
-_GLOBAL_LOCAL_SETTINGS_BACKUP = Path(str(_GLOBAL_LOCAL_SETTINGS_PATH) + f".benchmark-bak-{_PID}")
-
 _EMPTY_SETTINGS = "{}\n"
 
 
@@ -510,19 +504,17 @@ def apply_engine_config(
     result_dir: Path,
     repo_name: str,
 ) -> dict[str, Any]:
-    """Apply all config files for this engine. Returns a context dict for restore."""
+    """Prepare all config for this engine run. Returns a context dict."""
     engine_cfg = ENGINE_CONFIGS.get(tool["name"], {})
     ctx: dict[str, Any] = {
-        "wrote_global": False,
-        "had_original_global": GLOBAL_SETTINGS_PATH.exists(),
-        "wrote_global_local": False,
-        "had_original_global_local": _GLOBAL_LOCAL_SETTINGS_PATH.exists(),
         "mcp_config": None,
+        "settings_file": None,
     }
 
-    # Always neutralize ~/.claude/settings.json to prevent the user's real
-    # global hooks (e.g. RepoWise) from bleeding into other engine runs.
-    # Write the engine's global_settings template, or an empty object if none.
+    # For global_settings (user-level hooks, e.g. RepoWise): render the template
+    # to a run-specific file and pass it via --settings. We use --setting-sources
+    # project,local on every claude invocation to skip ~/.claude/ entirely, so we
+    # never need to touch or back up the user's real settings files.
     gs_rel = engine_cfg.get("global_settings")
     if gs_rel is not None:
         gs_template = ROOT / gs_rel
@@ -534,99 +526,56 @@ def apply_engine_config(
             _render_template(gs_template, repo_name),
             f"global_settings for '{tool['name']}'",
         )
+        settings_path = result_dir / "engine-settings.json"
+        settings_path.write_text(content, encoding="utf-8")
+        ctx["settings_file"] = settings_path
+
+    # Always write worktree project and local settings — even when the engine
+    # has no template — to neutralize any hooks the repo itself may have
+    # (e.g. CodeMap commits hooks into .claude/settings.local.json).
+    worktree_claude = workspace / ".claude"
+    worktree_claude.mkdir(parents=True, exist_ok=True)
+
+    ps_rel = engine_cfg.get("project_settings")
+    if ps_rel is not None:
+        ps_template = ROOT / ps_rel
+        if ps_template.exists():
+            content = _validated_json(
+                _render_template(ps_template, repo_name),
+                f"project_settings for '{tool['name']}'",
+            )
+        else:
+            print(
+                f"  WARNING: project_settings template for '{tool['name']}' "
+                f"not found (using empty): {ps_template}",
+                file=sys.stderr,
+            )
+            content = _EMPTY_SETTINGS
     else:
         content = _EMPTY_SETTINGS
+    (worktree_claude / "settings.json").write_text(content, encoding="utf-8")
 
-    if ctx["had_original_global"]:
-        shutil.copy2(GLOBAL_SETTINGS_PATH, _GLOBAL_SETTINGS_BACKUP)
-    GLOBAL_SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    GLOBAL_SETTINGS_PATH.write_text(content, encoding="utf-8")
-    ctx["wrote_global"] = True
-
-    # Always neutralize ~/.claude/settings.local.json to prevent the user's
-    # machine-local hooks (e.g. CodeMap) from bleeding into other engine runs.
-    if ctx["had_original_global_local"]:
-        shutil.copy2(_GLOBAL_LOCAL_SETTINGS_PATH, _GLOBAL_LOCAL_SETTINGS_BACKUP)
-    _GLOBAL_LOCAL_SETTINGS_PATH.write_text(_EMPTY_SETTINGS, encoding="utf-8")
-    ctx["wrote_global_local"] = True
-
-    try:
-        # Always write worktree project and local settings — even when the engine
-        # has no template — to neutralize any hooks the repo itself may have
-        # (e.g. CodeMap writes hooks into .claude/settings.local.json on init).
-        worktree_claude = workspace / ".claude"
-        worktree_claude.mkdir(parents=True, exist_ok=True)
-
-        ps_rel = engine_cfg.get("project_settings")
-        if ps_rel is not None:
-            ps_template = ROOT / ps_rel
-            if ps_template.exists():
-                content = _validated_json(
-                    _render_template(ps_template, repo_name),
-                    f"project_settings for '{tool['name']}'",
-                )
-            else:
-                print(
-                    f"  WARNING: project_settings template for '{tool['name']}' "
-                    f"not found (using empty): {ps_template}",
-                    file=sys.stderr,
-                )
-                content = _EMPTY_SETTINGS
+    ls_rel = engine_cfg.get("local_settings")
+    if ls_rel is not None:
+        ls_template = ROOT / ls_rel
+        if ls_template.exists():
+            content = _validated_json(
+                _render_template(ls_template, repo_name),
+                f"local_settings for '{tool['name']}'",
+            )
         else:
+            print(
+                f"  WARNING: local_settings template for '{tool['name']}' "
+                f"not found (using empty): {ls_template}",
+                file=sys.stderr,
+            )
             content = _EMPTY_SETTINGS
-        (worktree_claude / "settings.json").write_text(content, encoding="utf-8")
+    else:
+        content = _EMPTY_SETTINGS
+    (worktree_claude / "settings.local.json").write_text(content, encoding="utf-8")
 
-        ls_rel = engine_cfg.get("local_settings")
-        if ls_rel is not None:
-            ls_template = ROOT / ls_rel
-            if ls_template.exists():
-                content = _validated_json(
-                    _render_template(ls_template, repo_name),
-                    f"local_settings for '{tool['name']}'",
-                )
-            else:
-                print(
-                    f"  WARNING: local_settings template for '{tool['name']}' "
-                    f"not found (using empty): {ls_template}",
-                    file=sys.stderr,
-                )
-                content = _EMPTY_SETTINGS
-        else:
-            content = _EMPTY_SETTINGS
-        (worktree_claude / "settings.local.json").write_text(content, encoding="utf-8")
-
-        ctx["mcp_config"] = prepare_mcp_config(tool, result_dir, repo_name)
-
-    except Exception:
-        _do_restore_global(ctx)
-        raise
-
+    ctx["mcp_config"] = prepare_mcp_config(tool, result_dir, repo_name)
     return ctx
-
-
-def restore_engine_config(ctx: dict[str, Any]) -> None:
-    """Restore ~/.claude/settings.json and settings.local.json. Must not raise."""
-    try:
-        _do_restore_global(ctx)
-    except Exception as exc:
-        print(
-            f"WARNING: Failed to restore global Claude settings: {exc}",
-            file=sys.stderr,
-        )
-
-
-def _do_restore_global(ctx: dict[str, Any]) -> None:
-    if ctx.get("wrote_global"):
-        if ctx["had_original_global"] and _GLOBAL_SETTINGS_BACKUP.exists():
-            shutil.move(str(_GLOBAL_SETTINGS_BACKUP), str(GLOBAL_SETTINGS_PATH))
-        elif not ctx["had_original_global"]:
-            GLOBAL_SETTINGS_PATH.unlink(missing_ok=True)
-
-    if ctx.get("wrote_global_local"):
-        if ctx["had_original_global_local"] and _GLOBAL_LOCAL_SETTINGS_BACKUP.exists():
-            shutil.move(str(_GLOBAL_LOCAL_SETTINGS_BACKUP), str(_GLOBAL_LOCAL_SETTINGS_PATH))
-        elif not ctx["had_original_global_local"]:
-            _GLOBAL_LOCAL_SETTINGS_PATH.unlink(missing_ok=True)
 
 
 # =============================================================================
@@ -812,6 +761,7 @@ def execute_claude(
     worktree: Path,
     prompt: str,
     mcp_config: Path,
+    settings_file: Path | None = None,
 ) -> dict[str, Any]:
     command = [
         CLAUDE_BIN,
@@ -822,11 +772,20 @@ def execute_claude(
         "--strict-mcp-config",
         "--mcp-config",
         str(mcp_config),
+        # Exclude user-level (~/.claude/) settings to prevent machine hooks
+        # from contaminating benchmark runs. Engine hooks are injected either
+        # via --settings (global_settings engines like repowise) or written
+        # directly to the worktree's .claude/ files (project/local engines).
+        "--setting-sources",
+        "project,local",
         "--model",
         MODEL,
         "--permission-mode",
         PERMISSION_MODE,
     ]
+
+    if settings_file is not None:
+        command.extend(["--settings", str(settings_file)])
 
     if MAX_TURNS is not None:
         command.extend(
@@ -987,7 +946,6 @@ def run_one(
 
     started_at = now_iso()
 
-    engine_ctx: dict[str, Any] | None = None
     try:
         engine_ctx = apply_engine_config(
             tool,
@@ -996,6 +954,7 @@ def run_one(
             repo["name"],
         )
         mcp_config = engine_ctx["mcp_config"]
+        settings_file = engine_ctx["settings_file"]
 
         prompt = task_prompt(
             task_type,
@@ -1008,6 +967,7 @@ def run_one(
             workspace,
             prompt,
             mcp_config,
+            settings_file,
         )
 
         diff = git_diff(workspace)
@@ -1121,8 +1081,6 @@ def run_one(
         return result
 
     finally:
-        if engine_ctx is not None:
-            restore_engine_config(engine_ctx)
         remove_worktree(
             repo_path,
             workspace,
