@@ -32,7 +32,7 @@
       "config": {
         "global_settings": null,
         "mcp": "configs/codemap/mcp.json",
-        "project_settings": "configs/codemap/settings.json",
+        "project_settings": null,
         "local_settings": "configs/codemap/settings.local.json"
       }
     }
