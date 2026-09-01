@@ -16,7 +16,7 @@
         "mcp": "configs/repowise/mcp.json",
         "project_settings": null,
         "local_settings": null,
-        "claude_md_command": "repowise generate-claude-md --stdout"
+        "claude_md": "configs/repowise/claude.md"
       }
     },
     {
